@@ -1,0 +1,5 @@
+{
+  "name": "PathoST-GNN Interactive Querying Interface",
+  "description": "A web interface to demonstrate the PathoST-GNN workflow, allowing for simulated co-registration of Whole-Slide Images and Spatial Transcriptomics data, followed by interactive in-situ querying via a mock HPC cluster and analysis with Gemini.",
+  "requestFramePermissions": []
+}
