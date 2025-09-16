@@ -4,7 +4,7 @@ import { Header } from './components/Header';
 import { ControlPanel } from './components/ControlPanel';
 import { ImageViewer } from './components/ImageViewer';
 import { Sidebar } from './components/Sidebar';
-import type { AnalysisResult, SelectionRect, GeneSearchResult, GeneHotspot } from './types';
+import type { AnalysisResult, SelectionRect, GeneSearchResult, GeneHotspot, LoadedGeneDataPoint } from './types';
 
 const App: React.FC = () => {
   const [selectionRect, setSelectionRect] = useState<SelectionRect | null>(null);
@@ -15,6 +15,7 @@ const App: React.FC = () => {
   const [wsiUrl, setWsiUrl] = useState<string>('https://picsum.photos/seed/histology/1024/768');
   const [stDataVisible, setStDataVisible] = useState<boolean>(true);
   const [activeView, setActiveView] = useState<string>('analysis');
+  const [loadedGeneData, setLoadedGeneData] = useState<LoadedGeneDataPoint[] | null>(null);
 
   const handleQuery = useCallback(async (rect: SelectionRect) => {
     setIsQuerying(true);
@@ -41,6 +42,21 @@ const App: React.FC = () => {
     setIsQuerying(false);
   }, []);
 
+  const handleNewWSI = (url: string) => {
+    setWsiUrl(url);
+    setGeneSearchResult(null);
+    setSelectedHotspot(null);
+    setLoadedGeneData(null); // Also clear loaded gene data with new image
+  }
+
+  const handleClearAll = useCallback(() => {
+    setSelectionRect(null);
+    setAnalysisResult(null);
+    setGeneSearchResult(null);
+    setSelectedHotspot(null);
+    setLoadedGeneData(null);
+  }, []);
+
   return (
     <div className="flex flex-col h-screen bg-brand-primary font-sans">
       <Header />
@@ -52,13 +68,16 @@ const App: React.FC = () => {
           isQuerying={isQuerying}
           analysisResult={analysisResult}
           setAnalysisResult={setAnalysisResult}
-          setWsiUrl={setWsiUrl}
+          setWsiUrl={handleNewWSI}
           setStDataVisible={setStDataVisible}
           stDataVisible={stDataVisible}
           geneSearchResult={geneSearchResult}
           setGeneSearchResult={setGeneSearchResult}
           selectedHotspot={selectedHotspot}
           setSelectedHotspot={setSelectedHotspot}
+          loadedGeneData={loadedGeneData}
+          setLoadedGeneData={setLoadedGeneData}
+          onClearAll={handleClearAll}
         />
         <div className="flex-1 flex items-center justify-center p-4 bg-black/20">
           <ImageViewer

@@ -22,7 +22,10 @@ const generatePrompt = (hpcData: HpcResult): string => {
     
     Based on this data, provide a concise analysis. The top genes include common markers: COL1A1 (fibroblasts), KRT19 (epithelial cells), CD45 (immune cells), and FN1 (extracellular matrix).
     
-    Respond in JSON format according to the provided schema. The summary should be a brief, one-sentence interpretation. Potential cell types should be inferred from the gene list. The confidence score should reflect the certainty of the analysis based on the limited data provided.
+    Respond in JSON format according to the provided schema. 
+    - The summary should be a brief, one-sentence interpretation. 
+    - For potentialCellTypes, infer from the gene list. For each cell type, provide its name, an estimated prevalence score from 0-100, and a brief, one-sentence description of its role.
+    - The confidence score should reflect the certainty of the analysis based on the limited data provided.
   `;
 };
 
@@ -44,8 +47,16 @@ export const performGeminiAnalysis = async (hpcData: HpcResult): Promise<GeminiA
             },
             potentialCellTypes: {
               type: Type.ARRAY,
-              items: { type: Type.STRING },
-              description: "A list of potential cell types present in the region based on gene markers."
+              description: "A list of potential cell types present in the region based on gene markers.",
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  name: { type: Type.STRING, description: "The name of the cell type." },
+                  prevalence: { type: Type.NUMBER, description: "Estimated prevalence score from 0 to 100 for this cell type." },
+                  description: { type: Type.STRING, description: "A brief, one-sentence description of the cell type's typical role." }
+                },
+                required: ["name", "prevalence", "description"]
+              }
             },
             confidence: {
               type: Type.NUMBER,
@@ -67,7 +78,7 @@ export const performGeminiAnalysis = async (hpcData: HpcResult): Promise<GeminiA
     // Fallback in case of API error
     return {
       summary: "Could not analyze data due to an API error. Please check your API key and network connection.",
-      potentialCellTypes: ["Error"],
+      potentialCellTypes: [],
       confidence: 0,
     };
   }

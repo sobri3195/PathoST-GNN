@@ -18,9 +18,15 @@ export interface HpcResult {
   spatialClusters: number;
 }
 
+export interface PotentialCellType {
+  name: string;
+  prevalence: number;
+  description: string;
+}
+
 export interface GeminiAnalysis {
   summary: string;
-  potentialCellTypes: string[];
+  potentialCellTypes: PotentialCellType[];
   confidence: number;
 }
 
@@ -36,9 +42,18 @@ export interface GeneHotspot {
   dominantCellType: string;
 }
 
+export interface LoadedGeneDataPoint {
+  gene: string;
+  x: number;
+  y: number;
+  expression: number;
+  dominantCellType: string;
+}
+
 export interface GeneSearchResult {
   geneName: string;
   description: string;
   associatedCellTypes: string[];
   hotspots: GeneHotspot[];
+  dataSource?: 'mock' | 'csv';
 }

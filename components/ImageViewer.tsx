@@ -14,25 +14,31 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({ imageUrl, onSelect, st
   const [isSelecting, setIsSelecting] = useState(false);
   const [startPoint, setStartPoint] = useState({ x: 0, y: 0 });
   const [selection, setSelection] = useState<SelectionRect | null>(null);
+  const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Reset selection when image changes
+    // Reset selection and dimensions when image changes
     setSelection(null);
     onSelect(null);
+    // Reset dimensions to ensure the onLoad event for the new image is used
+    setImageDimensions({ width: 0, height: 0 });
   }, [imageUrl, onSelect]);
+
+  const handleImageLoad = (event: React.SyntheticEvent<HTMLImageElement, Event>) => {
+    const { naturalWidth, naturalHeight } = event.currentTarget;
+    setImageDimensions({ width: naturalWidth, height: naturalHeight });
+  };
   
   const getCoords = (e: React.MouseEvent<HTMLDivElement>): { x: number; y: number } => {
-    if (!containerRef.current) return { x: 0, y: 0 };
+    if (!containerRef.current || !imageDimensions.width || !imageDimensions.height) {
+      return { x: 0, y: 0 };
+    }
     const rect = containerRef.current.getBoundingClientRect();
     const targetWidth = containerRef.current.clientWidth;
     const targetHeight = containerRef.current.clientHeight;
 
-    // This part requires knowing the actual image dimensions to scale correctly.
-    // For picsum photos, we requested 1024x768, so we assume that's the intrinsic size.
-    // A more robust solution would use the image's naturalWidth/naturalHeight on load.
-    const naturalWidth = 1024;
-    const naturalHeight = 768;
+    const { width: naturalWidth, height: naturalHeight } = imageDimensions;
 
     const scaleX = targetWidth / naturalWidth;
     const scaleY = targetHeight / naturalHeight;
@@ -44,14 +50,19 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({ imageUrl, onSelect, st
     const offsetX = (targetWidth - imgDisplayWidth) / 2;
     const offsetY = (targetHeight - imgDisplayHeight) / 2;
 
+    const x = (e.clientX - rect.left - offsetX) / scale;
+    const y = (e.clientY - rect.top - offsetY) / scale;
+
+    // Clamp coordinates to be within the image bounds
     return {
-      x: (e.clientX - rect.left - offsetX) / scale,
-      y: (e.clientY - rect.top - offsetY) / scale,
+      x: Math.max(0, Math.min(x, naturalWidth)),
+      y: Math.max(0, Math.min(y, naturalHeight)),
     };
   };
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault();
+    if (!imageDimensions.width) return; // Don't allow selection if image isn't loaded
     onHotspotClick(null); // Clear selected hotspot when starting a new selection
     setIsSelecting(true);
     const coords = getCoords(e);
@@ -72,13 +83,14 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({ imageUrl, onSelect, st
   };
   
   const getDisplayCoords = (rect: SelectionRect) => {
-    if (!containerRef.current) return { left: 0, top: 0, width: 0, height: 0 };
+    if (!containerRef.current || !imageDimensions.width || !imageDimensions.height) {
+      return { left: 0, top: 0, width: 0, height: 0 };
+    }
     
     const targetWidth = containerRef.current.clientWidth;
     const targetHeight = containerRef.current.clientHeight;
 
-    const naturalWidth = 1024;
-    const naturalHeight = 768;
+    const { width: naturalWidth, height: naturalHeight } = imageDimensions;
 
     const scaleX = targetWidth / naturalWidth;
     const scaleY = targetHeight / naturalHeight;
@@ -118,16 +130,21 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({ imageUrl, onSelect, st
   return (
     <div
       ref={containerRef}
-      className="relative w-full h-full cursor-crosshair select-none overflow-hidden bg-black flex items-center justify-center"
+      className={`relative w-full h-full select-none overflow-hidden bg-black flex items-center justify-center ${imageDimensions.width ? 'cursor-crosshair' : 'cursor-wait'}`}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseLeave}
     >
       <div className="relative" style={{maxWidth: '100%', maxHeight: '100%'}}>
-        <img src={imageUrl} alt="Whole-Slide Image" className="max-w-full max-h-full object-contain pointer-events-none" />
+        <img 
+            src={imageUrl} 
+            alt="Whole-Slide Image" 
+            className="max-w-full max-h-full object-contain pointer-events-none"
+            onLoad={handleImageLoad}
+        />
         
-        {stDataVisible && (
+        {stDataVisible && imageDimensions.width > 0 && (
           <div 
             className="absolute top-0 left-0 w-full h-full pointer-events-none"
             style={{
@@ -146,7 +163,7 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({ imageUrl, onSelect, st
 
         {geneSearchResult?.hotspots.map((hotspot, index) => {
             // Hotspot size in image coordinates.
-            const hotspotSize = 20; 
+            const hotspotSize = Math.min(imageDimensions.width, imageDimensions.height) / 50; // Dynamic hotspot size
             const displayCoords = getDisplayCoords({
                 x: hotspot.x,
                 y: hotspot.y,
@@ -180,7 +197,7 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({ imageUrl, onSelect, st
                     <div className="relative inline-flex rounded-full h-full w-full bg-brand-highlight border-2 border-brand-primary"></div>
                     {/* Selection ring */}
                     {isSelected && (
-                      <div className="absolute top-0 left-0 w-full h-full rounded-full ring-2 ring-yellow-300 animate-pulse"></div>
+                      <div className="absolute -top-0.5 -left-0.5 w-[calc(100%+4px)] h-[calc(100%+4px)] rounded-full ring-2 ring-yellow-300 animate-pulse"></div>
                     )}
                 </div>
 
@@ -191,6 +208,7 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({ imageUrl, onSelect, st
                 >
                   <strong className="text-brand-highlight">{geneSearchResult.geneName}</strong>
                   <p>Expression: {hotspot.expression.toFixed(2)}</p>
+                  <p>Cell Type: {hotspot.dominantCellType}</p>
                   <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-brand-secondary" aria-hidden="true"></div>
                 </div>
               </div>
@@ -198,7 +216,7 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({ imageUrl, onSelect, st
         })}
       </div>
       <div className="absolute bottom-2 right-2 bg-black/50 text-white text-xs px-2 py-1 rounded">
-        Click and drag to select a region for analysis
+        {imageDimensions.width ? 'Click and drag to select a region for analysis' : 'Loading image...'}
       </div>
     </div>
   );
