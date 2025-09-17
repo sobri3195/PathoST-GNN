@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import type { SelectionRect, AnalysisResult, GeneSearchResult, GeneHotspot, LoadedGeneDataPoint } from '../types';
 import { performGeminiAnalysis } from '../services/geminiService';
@@ -43,12 +42,63 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
   setGeneSearchResult,
   selectedHotspot,
   setSelectedHotspot,
+  loadedGeneData,
   onClearAll,
 }) => {
   const [isGeminiLoading, setIsGeminiLoading] = useState(false);
   const [geneQuery, setGeneQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+
+  const aggregatedGeneData = useMemo(() => {
+    if (!loadedGeneData || loadedGeneData.length === 0) {
+        return [];
+    }
+
+    const geneDataMap = new Map<string, { totalExpression: number; count: number }>();
+    loadedGeneData.forEach(point => {
+        const existing = geneDataMap.get(point.gene);
+        if (existing) {
+            existing.totalExpression += point.expression;
+            existing.count++;
+        } else {
+            geneDataMap.set(point.gene, { totalExpression: point.expression, count: 1 });
+        }
+    });
+
+    const processedData = Array.from(geneDataMap.entries()).map(([gene, data]) => ({
+        name: gene,
+        expression: data.totalExpression / data.count,
+    }));
+    
+    // Sort descending by expression for a top-to-bottom display of highest values
+    return processedData.sort((a, b) => b.expression - a.expression);
+  }, [loadedGeneData]);
   
+  const expressionByCellType = useMemo(() => {
+    if (!geneSearchResult?.hotspots) {
+      return [];
+    }
+
+    const cellTypeMap = new Map<string, { totalExpression: number; count: number }>();
+    geneSearchResult.hotspots.forEach(hotspot => {
+      const entry = cellTypeMap.get(hotspot.dominantCellType);
+      if (entry) {
+        entry.totalExpression += hotspot.expression;
+        entry.count++;
+      } else {
+        cellTypeMap.set(hotspot.dominantCellType, { totalExpression: hotspot.expression, count: 1 });
+      }
+    });
+
+    const data = Array.from(cellTypeMap.entries()).map(([cellType, data]) => ({
+      cellType,
+      avgExpression: data.totalExpression / data.count,
+    }));
+
+    return data.sort((a, b) => a.avgExpression - b.avgExpression);
+  }, [geneSearchResult]);
+
+
   const handleQueryClick = () => {
     if (selectionRect) {
       onQuery(selectionRect);
@@ -286,11 +336,33 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
                  </button>
                  <h3 className="text-lg font-bold text-brand-highlight mb-2">Gene: {geneSearchResult.geneName}</h3>
                  <p className="text-sm text-brand-light mb-2">{geneSearchResult.description}</p>
-                 <div className="text-sm">
+                 <div className="text-sm mb-3">
                      <p><strong>Associated Cell Types:</strong> {geneSearchResult.associatedCellTypes.join(', ')}</p>
                      <p><strong>Hotspots Found:</strong> {geneSearchResult.hotspots.length}</p>
                      {geneSearchResult.dataSource === 'csv' && <p className="text-xs italic text-green-400 mt-1">Data loaded from CSV.</p>}
                  </div>
+
+                 {expressionByCellType.length > 0 && (
+                  <div className="mt-4 pt-3 border-t border-brand-accent">
+                    <h4 className="font-semibold text-brand-highlight mb-2">Average Expression by Cell Type</h4>
+                    <div className="h-40 w-full">
+                      <ResponsiveContainer>
+                        <BarChart data={expressionByCellType} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#415A77" />
+                          <XAxis type="number" stroke="#E0E1DD" fontSize={12} domain={[0, 'dataMax + 10']} />
+                          <YAxis type="category" dataKey="cellType" stroke="#E0E1DD" fontSize={12} width={80} interval={0} />
+                          <Tooltip
+                            cursor={{ fill: '#415A77' }}
+                            contentStyle={{ backgroundColor: '#0D1B2A', border: '1px solid #64FFDA' }}
+                            labelStyle={{ color: '#E0E1DD' }}
+                          />
+                          <Bar dataKey="avgExpression" fill="#64FFDA" name="Avg. Expression" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                 )}
+
                  {selectedHotspot && (
                      <div className="mt-3 pt-3 border-t border-brand-accent">
                         <h4 className="font-semibold text-brand-highlight">Selected Hotspot</h4>
@@ -299,6 +371,42 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
                      </div>
                  )}
              </div>
+        )}
+
+        {/* Loaded Gene Data Chart */}
+        {aggregatedGeneData.length > 0 && (
+            <div className="bg-brand-primary/40 p-3 rounded-lg animate-fade-in">
+                <h3 className="text-lg font-bold text-brand-highlight mb-2">Loaded Gene Expression</h3>
+                <p className="text-sm text-brand-light mb-2">Average expression levels from loaded data points.</p>
+                <div className="h-64 w-full">
+                    <ResponsiveContainer>
+                        <BarChart data={aggregatedGeneData} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 20 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#415A77" />
+                            <XAxis 
+                                type="number" 
+                                stroke="#E0E1DD" 
+                                fontSize={12} 
+                                domain={[0, 'dataMax + 10']}
+                                label={{ value: 'Average Expression', position: 'insideBottom', offset: -5, fill: '#E0E1DD', fontSize: 12 }}
+                            />
+                            <YAxis 
+                                type="category" 
+                                dataKey="name" 
+                                stroke="#E0E1DD" 
+                                fontSize={12} 
+                                width={80} 
+                                interval={0} 
+                            />
+                            <Tooltip 
+                                cursor={{fill: '#415A77'}}
+                                contentStyle={{ backgroundColor: '#0D1B2A', border: '1px solid #778DA9' }}
+                                labelStyle={{ color: '#E0E1DD' }}
+                            />
+                            <Bar dataKey="expression" fill="#778DA9" name="Avg. Expression" />
+                        </BarChart>
+                    </ResponsiveContainer>
+                </div>
+            </div>
         )}
     </aside>
   );
